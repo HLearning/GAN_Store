@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import os
 import numpy as np
 
-class GAN():
+class DCGAN():
     def __init__(self):
         self.img_rows = 28
         self.img_cols = 28
@@ -40,19 +40,23 @@ class GAN():
         #self.combined.summary()
 
     def G(self):
+
         model = Sequential()
-        model.add(Dense(256, input_dim=self.latent_dim))
-        model.add(LeakyReLU(alpha=0.2))
+
+        model.add(Dense(128 * 7 * 7, activation="relu", input_dim=self.latent_dim))
+        model.add(Reshape((7, 7, 128)))
+        model.add(UpSampling2D())
+        model.add(Conv2D(128, kernel_size=3, padding="same"))
         model.add(BatchNormalization(momentum=0.8))
-        model.add(Dense(512))
-        model.add(LeakyReLU(alpha=0.2))
+        model.add(Activation("relu"))
+        model.add(UpSampling2D())
+        model.add(Conv2D(64, kernel_size=3, padding="same"))
         model.add(BatchNormalization(momentum=0.8))
-        model.add(Dense(1024))
-        model.add(LeakyReLU(alpha=0.2))
-        model.add(BatchNormalization(momentum=0.8))
-        model.add(Dense(np.prod(self.img_shape), activation='tanh'))
-        model.add(Reshape(self.img_shape))
-        #model.summary()
+        model.add(Activation("relu"))
+        model.add(Conv2D(self.channels, kernel_size=3, padding="same"))
+        model.add(Activation("tanh"))
+
+        model.summary()
 
         noise = Input(shape=(self.latent_dim,))
         img = model(noise)
@@ -60,14 +64,29 @@ class GAN():
         return Model(noise, img)
 
     def D(self):
+
         model = Sequential()
-        model.add(Flatten(input_shape=self.img_shape))
-        model.add(Dense(512))
+
+        model.add(Conv2D(32, kernel_size=3, strides=2, input_shape=self.img_shape, padding="same"))
         model.add(LeakyReLU(alpha=0.2))
-        model.add(Dense(256))
+        model.add(Dropout(0.25))
+        model.add(Conv2D(64, kernel_size=3, strides=2, padding="same"))
+        model.add(ZeroPadding2D(padding=((0,1),(0,1))))
+        model.add(BatchNormalization(momentum=0.8))
         model.add(LeakyReLU(alpha=0.2))
+        model.add(Dropout(0.25))
+        model.add(Conv2D(128, kernel_size=3, strides=2, padding="same"))
+        model.add(BatchNormalization(momentum=0.8))
+        model.add(LeakyReLU(alpha=0.2))
+        model.add(Dropout(0.25))
+        model.add(Conv2D(256, kernel_size=3, strides=1, padding="same"))
+        model.add(BatchNormalization(momentum=0.8))
+        model.add(LeakyReLU(alpha=0.2))
+        model.add(Dropout(0.25))
+        model.add(Flatten())
         model.add(Dense(1, activation='sigmoid'))
-        #model.summary()
+
+        model.summary()
 
         img = Input(shape=self.img_shape)
         validity = model(img)
@@ -75,7 +94,6 @@ class GAN():
         return Model(img, validity)
 
     def train(self, epochs, batch_size=128, save_interval=50):
-
         # 加载数据
         (X_train, _), (_, _) = mnist.load_data()
 
@@ -116,6 +134,8 @@ class GAN():
             # 训练G， 让噪声接近真实图
             g_loss = self.combined.train_on_batch(noise, valid)
 
+
+
             # 打印训练结果
             print("epoch：%5d, [D loss: %f, acc.: %.2f%%] [G loss: %f]" % (epoch, d_loss[0], 100*d_loss[1], g_loss))
 
@@ -127,7 +147,8 @@ class GAN():
         r, c = 5, 5
         noise = np.random.normal(0, 1, (r * c, self.latent_dim))
         gen_imgs = self.G.predict(noise)
-        # 预测结果在[-1,1]之间， 缩放到[0, 1]
+
+        # Rescale images 0 - 1
         gen_imgs = 0.5 * gen_imgs + 0.5
 
         fig, axs = plt.subplots(r, c)
@@ -145,5 +166,5 @@ class GAN():
         plt.close()
 
 if __name__ == '__main__':
-    gan = GAN()
-    gan.train(epochs=50000, batch_size=32, save_interval=200)
+    dcgan = DCGAN()
+    dcgan.train(epochs=10000, batch_size=32, save_interval=100)
